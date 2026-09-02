@@ -2,15 +2,16 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AI Biometric Mirror</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { 
+    html, body { 
       background: #050811; 
       color: #00f0ff; 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; 
-      height: 100vh; 
+      height: 100%;
+      height: 100dvh; 
       overflow: hidden; 
       display: flex; 
       align-items: center; 
@@ -20,7 +21,8 @@
     #camera-container { 
       position: relative; 
       width: 100vw; 
-      height: 100vh; 
+      height: 100%;
+      height: 100dvh; 
       overflow: hidden; 
       background: #000;
     }
@@ -39,31 +41,33 @@
       display: flex; 
       flex-direction: column; 
       justify-content: space-between; 
-      padding: 20px; 
+      padding: 16px; 
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
       background: radial-gradient(circle, transparent 40%, rgba(5, 8, 17, 0.75) 100%); 
     }
 
     .hud-panel { 
-      background: rgba(10, 15, 30, 0.8); 
+      background: rgba(10, 15, 30, 0.82); 
       backdrop-filter: blur(10px); 
       -webkit-backdrop-filter: blur(10px);
-      padding: 12px 16px; 
+      padding: 10px 14px; 
       border-radius: 12px; 
       border: 1px solid rgba(0, 240, 255, 0.25); 
       font-family: 'Courier New', monospace;
-      font-size: 13px; 
-      line-height: 1.6; 
+      font-size: 12.5px; 
+      line-height: 1.5; 
       max-width: 290px; 
     }
     .hud-highlight { color: #ff3366; font-weight: bold; }
 
     .scanner-target { 
       position: absolute; 
-      top: 45%; 
+      top: 38%; 
       left: 50%; 
       transform: translate(-50%, -50%); 
-      width: 230px; 
-      height: 280px; 
+      width: 220px; 
+      height: 270px; 
       transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     
@@ -91,21 +95,24 @@
       border-radius: 12px;
     }
 
+    /* Đẩy vị trí thẻ kết quả lên trên thanh điều hướng di động */
     #result-card { 
       display: none; 
       pointer-events: auto;
       position: absolute; 
-      bottom: 20px; 
+      bottom: calc(85px + env(safe-area-inset-bottom, 0px)); 
       left: 50%; 
       transform: translateX(-50%); 
-      width: 92%; 
-      max-width: 360px; 
+      width: 90%; 
+      max-width: 350px; 
+      max-height: 48vh;
+      overflow-y: auto;
       background: rgba(13, 17, 28, 0.94); 
       backdrop-filter: blur(16px); 
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 51, 102, 0.45); 
       border-radius: 20px; 
-      padding: 16px 14px; 
+      padding: 14px 14px 12px; 
       text-align: center; 
       color: #fff; 
       box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
@@ -115,25 +122,25 @@
       from { transform: translate(-50%, 30px); opacity: 0; } 
       to { transform: translate(-50%, 0); opacity: 1; } 
     }
-    #result-card h3 { color: #ff3366; margin-bottom: 6px; font-size: 16px; }
-    #result-card p { font-size: 13.5px; line-height: 1.5; color: #cbd5e1; }
+    #result-card h3 { color: #ff3366; margin-bottom: 5px; font-size: 15.5px; }
+    #result-card p { font-size: 13px; line-height: 1.45; color: #cbd5e1; }
 
     .btn-group {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      margin-top: 14px;
+      gap: 7px;
+      margin-top: 10px;
     }
 
     .btn-action {
       width: 100%;
-      padding: 10px 12px;
-      border-radius: 22px;
-      font-size: 13px;
+      padding: 9px 12px;
+      border-radius: 20px;
+      font-size: 12.5px;
       font-weight: bold;
       cursor: pointer;
       transition: transform 0.15s;
-      line-height: 1.3;
+      line-height: 1.25;
     }
     .btn-action:active { transform: scale(0.96); }
 
@@ -180,7 +187,7 @@
 
     #start-screen h2 { 
       color: #ff75a0; 
-      font-size: 22px; 
+      font-size: 21px; 
       font-weight: 700;
       letter-spacing: 0.5px;
       text-shadow: 0 0 16px rgba(255, 117, 160, 0.45);
@@ -188,15 +195,15 @@
 
     #start-screen p { 
       color: #fce7f3; 
-      font-size: 14.5px; 
+      font-size: 14px; 
       margin-top: 10px; 
       max-width: 280px; 
       line-height: 1.6; 
     }
 
     .btn-start { 
-      margin-top: 26px; 
-      padding: 14px 34px; 
+      margin-top: 24px; 
+      padding: 14px 32px; 
       background: linear-gradient(135deg, #ff4b8b 0%, #ff758c 100%); 
       color: #ffffff; 
       font-weight: bold; 
@@ -232,7 +239,7 @@
       background: linear-gradient(160deg, #25091c 0%, #150614 100%);
       border: 1px solid rgba(255, 117, 160, 0.5);
       border-radius: 24px;
-      padding: 24px 20px;
+      padding: 22px 18px;
       max-width: 320px;
       width: 100%;
       text-align: center;
@@ -242,14 +249,14 @@
     .letter-card h2 {
       font-size: 19px;
       color: #ff75a0;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .letter-body {
-      font-size: 14px;
-      line-height: 1.7;
+      font-size: 13.5px;
+      line-height: 1.65;
       color: #fbcfe8;
       text-align: justify;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     .letter-footer {
       font-size: 13px;
@@ -276,7 +283,6 @@
       line-height: 1.5;
     }
 
-    /* Container phát YouTube tương thích Safari iOS và Chrome Android */
     #yt-player-container {
       position: fixed;
       bottom: 0;
@@ -291,7 +297,7 @@
 </head>
 <body>
 
-  <!-- Trình phát YouTube ẩn nhưng hợp lệ với chính sách autoplay mobile -->
+  <!-- Trình phát YouTube ẩn nhưng kích hoạt hợp lệ trên điện thoại -->
   <div id="yt-player-container">
     <div id="yt-player"></div>
   </div>
@@ -348,7 +354,7 @@
   <!-- Popup Bức thư kết thúc -->
   <div id="final-modal">
     <div class="letter-card">
-      <div style="font-size: 36px; margin-bottom: 8px;">📮</div>
+      <div style="font-size: 34px; margin-bottom: 8px;">📮</div>
       <h2>Gửi người ở xa...</h2>
       <div class="letter-body">
         Khoảng cách địa lý có thể đo bằng cây số, nhưng sự quan tâm thì không có giới hạn nào cả.<br><br>
@@ -357,7 +363,7 @@
       <div class="letter-footer">
         Đừng quên nhắn tin cho tớ sau khi đọc xong nhé! ❤️
       </div>
-      <button onclick="closeFinalModal()" style="margin-top: 18px; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #e2e8f0; padding: 7px 20px; border-radius: 16px; font-size: 12px; cursor: pointer;">Đóng lại ✨</button>
+      <button onclick="closeFinalModal()" style="margin-top: 16px; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #e2e8f0; padding: 6px 18px; border-radius: 16px; font-size: 12px; cursor: pointer;">Đóng lại ✨</button>
     </div>
   </div>
 
@@ -380,7 +386,6 @@
     let player = null;
     let streamTracker = null;
 
-    // Chuẩn bị sẵn 1 video ngẫu nhiên ngay khi mở trang
     function onYouTubeIframeAPIReady() {
       currentTrackIndex = Math.floor(Math.random() * youtubeList.length);
       const initialId = youtubeList[currentTrackIndex];
@@ -403,7 +408,6 @@
       if (!player) return;
 
       if (isFirstTime) {
-        // Điện thoại cần gọi playVideo ngay trong luồng click ban đầu
         if (typeof player.playVideo === 'function') {
           player.setVolume(70);
           player.playVideo();
@@ -411,7 +415,6 @@
         return;
       }
 
-      // Đổi bài khi bấm quét lại
       let newIndex;
       do {
         newIndex = Math.floor(Math.random() * youtubeList.length);
@@ -475,7 +478,6 @@
     }
 
     async function initScanner() {
-      // Kích hoạt phát nhạc ngay tại cử chỉ chạm (User Gesture)
       playOrSwitchYouTubeTrack(true);
       document.getElementById('start-screen').style.display = 'none';
 
@@ -501,16 +503,13 @@
     function openFinalModal() {
       document.getElementById('final-modal').style.display = 'flex';
       
-      // Tắt camera để giải phóng tài nguyên
       if (streamTracker) {
         streamTracker.getTracks().forEach(track => track.stop());
       }
       if (scanLoop) clearInterval(scanLoop);
 
-      // Hạ nhỏ âm lượng nhạc
       if (player && typeof player.setVolume === 'function') player.setVolume(25);
 
-      // Bắn pháo hoa hình tim
       if (typeof confetti === 'function') {
         confetti({
           particleCount: 45,
@@ -565,12 +564,10 @@
 
       const stats = analyzeCameraFrame();
 
-      // Che camera làm tối om
       if (stats.brightness < 30) {
         return { ok: false, reason: "DARK" };
       }
 
-      // Che camera làm mất chi tiết
       if (stats.variance < 90) {
         return { ok: false, reason: "BLOCKED" };
       }
