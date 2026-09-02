@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AI Biometric Mirror</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      background: #050811; 
+      color: #00f0ff; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; 
+      height: 100vh; 
+      overflow: hidden; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+    }
+
+    #camera-container { 
+      position: relative; 
+      width: 100vw; 
+      height: 100vh; 
+      overflow: hidden; 
+      background: #000;
+    }
+    
+    video { 
+      width: 100%; 
+      height: 100%; 
+      object-fit: cover; 
+      transform: scaleX(-1); 
+    }
+
+    .overlay { 
+      position: absolute; 
+      inset: 0; 
+      pointer-events: none; 
+      display: flex; 
+      flex-direction: column; 
+      justify-content: space-between; 
+      padding: 24px; 
+      background: radial-gradient(circle, transparent 40%, rgba(5, 8, 17, 0.7) 100%); 
+    }
+
+    .hud-panel { 
+      background: rgba(10, 15, 30, 0.75); 
+      backdrop-filter: blur(10px); 
+      -webkit-backdrop-filter: blur(10px);
+      padding: 12px 16px; 
+      border-radius: 12px; 
+      border: 1px solid rgba(0, 240, 255, 0.25); 
+      font-family: 'Courier New', monospace;
+      font-size: 13px; 
+      line-height: 1.6; 
+      max-width: 290px; 
+    }
+    .hud-highlight { color: #ff3366; font-weight: bold; }
+
+    .scanner-target { 
+      position: absolute; 
+      top: 48%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      width: 240px; 
+      height: 290px; 
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    .corner { position: absolute; width: 22px; height: 22px; border-color: #00f0ff; border-style: solid; }
+    .top-left { top: 0; left: 0; border-width: 3px 0 0 3px; border-top-left-radius: 8px; }
+    .top-right { top: 0; right: 0; border-width: 3px 3px 0 0; border-top-right-radius: 8px; }
+    .bottom-left { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-bottom-left-radius: 8px; }
+    .bottom-right { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-bottom-right-radius: 8px; }
+
+    .scan-laser { 
+      width: 100%; 
+      height: 2px; 
+      background: linear-gradient(90deg, transparent, #00f0ff, transparent); 
+      box-shadow: 0 0 10px #00f0ff;
+      position: absolute; 
+      top: 0; 
+      animation: laserSweep 2s infinite ease-in-out; 
+    }
+    @keyframes laserSweep { 0% { top: 4%; } 50% { top: 96%; } 100% { top: 4%; } }
+
+    .scanner-target.locked .corner { border-color: #ff3366; }
+    .scanner-target.locked .scan-laser { display: none; }
+    .scanner-target.locked { 
+      box-shadow: inset 0 0 25px rgba(255, 51, 102, 0.25), 0 0 25px rgba(255, 51, 102, 0.3); 
+      border-radius: 12px;
+    }
+
+    #result-card { 
+      display: none; 
+      pointer-events: auto;
+      position: absolute; 
+      bottom: 25px; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      width: 90%; 
+      max-width: 350px; 
+      background: rgba(13, 17, 28, 0.92); 
+      backdrop-filter: blur(14px); 
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 51, 102, 0.4); 
+      border-radius: 20px; 
+      padding: 18px 16px; 
+      text-align: center; 
+      color: #fff; 
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.35s ease-out forwards; 
+    }
+    @keyframes slideUp { 
+      from { transform: translate(-50%, 30px); opacity: 0; } 
+      to { transform: translate(-50%, 0); opacity: 1; } 
+    }
+    #result-card h3 { color: #ff3366; margin-bottom: 8px; font-size: 16px; }
+    #result-card p { font-size: 13.5px; line-height: 1.5; color: #cbd5e1; }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 14px;
+    }
+
+    .btn-action {
+      flex: 1;
+      padding: 9px 12px;
+      border-radius: 20px;
+      font-size: 12.5px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .btn-action:active { transform: scale(0.95); }
+
+    .btn-rescan {
+      background: rgba(255, 51, 102, 0.15);
+      border: 1px solid #ff3366;
+      color: #ff3366;
+    }
+
+    .btn-letter {
+      background: linear-gradient(135deg, #ff4b8b 0%, #ff758c 100%);
+      border: none;
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(255, 75, 139, 0.4);
+    }
+
+    /* Màn hình Welcome màu hồng */
+    #start-screen { 
+      position: absolute; 
+      inset: 0; 
+      background: radial-gradient(circle at center, #2e081d 0%, #0d040f 100%); 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      justify-content: center; 
+      z-index: 20; 
+      padding: 24px; 
+      text-align: center; 
+    }
+
+    .heart-pulse {
+      font-size: 52px;
+      margin-bottom: 14px;
+      animation: heartBeat 1.4s infinite ease-in-out;
+      display: inline-block;
+    }
+    @keyframes heartBeat {
+      0% { transform: scale(1); }
+      14% { transform: scale(1.2); }
+      28% { transform: scale(1); }
+      42% { transform: scale(1.2); }
+      70% { transform: scale(1); }
+    }
+
+    #start-screen h2 { 
+      color: #ff75a0; 
+      font-size: 22px; 
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 0 16px rgba(255, 117, 160, 0.45);
+    }
+
+    #start-screen p { 
+      color: #fce7f3; 
+      font-size: 14.5px; 
+      margin-top: 10px; 
+      max-width: 280px; 
+      line-height: 1.6; 
+    }
+
+    .btn-start { 
+      margin-top: 26px; 
+      padding: 14px 34px; 
+      background: linear-gradient(135deg, #ff4b8b 0%, #ff758c 100%); 
+      color: #ffffff; 
+      font-weight: bold; 
+      border: none; 
+      border-radius: 30px; 
+      font-size: 15px; 
+      cursor: pointer; 
+      box-shadow: 0 8px 25px rgba(255, 75, 139, 0.45);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-start:active { 
+      transform: scale(0.96);
+      box-shadow: 0 4px 15px rgba(255, 75, 139, 0.3);
+    }
+
+    /* Bảng thông điệp kết thúc */
+    #final-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 4, 15, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      animation: fadeIn 0.4s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .letter-card {
+      background: linear-gradient(160deg, #25091c 0%, #150614 100%);
+      border: 1px solid rgba(255, 117, 160, 0.5);
+      border-radius: 24px;
+      padding: 28px 22px;
+      max-width: 320px;
+      width: 100%;
+      text-align: center;
+      color: #fff;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(255, 75, 139, 0.25);
+      position: relative;
+    }
+    .letter-card h2 {
+      font-size: 20px;
+      color: #ff75a0;
+      margin-bottom: 12px;
+      font-family: inherit;
+    }
+    .letter-body {
+      font-size: 14.5px;
+      line-height: 1.7;
+      color: #fbcfe8;
+      text-align: justify;
+      margin-bottom: 20px;
+    }
+    .letter-footer {
+      font-size: 13px;
+      color: #f472b6;
+      font-weight: bold;
+    }
+
+    #dark-warning {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      max-width: 300px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #eab308;
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      color: #fef08a;
+      z-index: 15;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    #yt-player-container {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="yt-player-container">
+    <div id="yt-player"></div>
+  </div>
+
+  <!-- Màn hình chào -->
+  <div id="start-screen">
+    <div class="heart-pulse">💖</div>
+    <h2>Gương Đo Năng Lượng Tích Cực</h2>
+    <p>
+      Hôm nay có mệt không? Soi gương một chút xem vũ trụ gửi tín hiệu ngọt ngào gì cho bạn nhé! ✨
+    </p>
+    <button class="btn-start" onclick="initScanner()">BẬT CAMERA SOI NGAY 🥰</button>
+  </div>
+
+  <div id="camera-container">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="hidden-canvas" style="display: none;"></canvas>
+
+    <div id="dark-warning">
+      <div id="warn-icon" style="font-size: 32px; margin-bottom: 6px;">💡</div>
+      <b id="warn-title" style="color: #eab308; font-size: 16px;">TỐI QUÁ KHÔNG THẤY GÌ!</b>
+      <p id="warn-desc" style="margin-top: 8px; color: #cbd5e1;">Phòng tối om thế này AI không tìm thấy nụ cười của bạn đâu. Bật đèn lên hoặc dí gần vào màn hình nha!</p>
+    </div>
+
+    <div class="overlay">
+      <div class="hud-panel">
+        <div>STATUS: <span id="sys-status" style="color: #00f0ff;">SEARCHING...</span></div>
+        <div id="log-1">> Đang tìm kiếm mục tiêu...</div>
+        <div id="log-2" style="color: #94a3b8;">> Tiến độ nhận diện: 0%</div>
+      </div>
+
+      <div class="scanner-target" id="scanTarget">
+        <div class="corner top-left"></div>
+        <div class="corner top-right"></div>
+        <div class="corner bottom-left"></div>
+        <div class="corner bottom-right"></div>
+        <div class="scan-laser"></div>
+      </div>
+
+      <!-- Thẻ kết quả phân tích -->
+      <div id="result-card">
+        <h3 id="res-title">TIÊU ĐỀ</h3>
+        <p id="res-desc">Nội dung</p>
+        <p id="res-action" style="margin-top: 8px; font-size: 12.5px; color: #38bdf8; font-weight: bold;"></p>
+        
+        <div class="btn-group">
+          <button class="btn-action btn-rescan" onclick="handleRescan()">MỜI BẠN QUÉT LẠI NHÉ CÓ BẤT NGỜ NỮA ĐÓ 🥰 🔄</button>
+          <button class="btn-action btn-letter" onclick="openFinalModal()">CÓ THÔNG ĐIỆP MUỐN GỬI CHO BẠN NÈ 💌</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup Bức thư kết thúc -->
+  <div id="final-modal">
+    <div class="letter-card">
+      <div style="font-size: 36px; margin-bottom: 10px;">📮</div>
+      <h2>Gửi người ở xa...</h2>
+      <div class="letter-body">
+        Khoảng cách địa lý có thể đo bằng cây số, nhưng sự quan tâm thì không có giới hạn nào cả.<br><br>
+        Cảm ơn bạn đã mỉm cười trước màn hình hôm nay. Dù bận rộn hay mệt mỏi thế nào, nhớ giữ gìn sức khỏe và luôn nhớ rằng ở đầu dây bên kia luôn có một người ủng hộ bạn vô điều kiện!
+      </div>
+      <div class="letter-footer">
+        Đừng quên nhắn tin cho tớ sau khi đọc xong nhé! ❤️
+      </div>
+      <button onclick="closeFinalModal()" style="margin-top: 20px; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #e2e8f0; padding: 6px 18px; border-radius: 15px; font-size: 12px; cursor: pointer;">Đóng lại ✨</button>
+    </div>
+  </div>
+
+  <!-- Thư viện pháo hoa trái tim -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    const youtubeList = [
+      "llf_L0i9OdA",
+      "BLfDZ1FEs-k",
+      "USvnDk1hi5I",
+      "f-VsoLm4i5c",
+      "VHjMJeLsI0o",
+      "NlrYe__kDvE",
+      "B72uSHHT87o"
+    ];
+
+    let currentTrackIndex = -1;
+    let player = null;
+    let streamTracker = null;
+
+    function onYouTubeIframeAPIReady() {
+      currentTrackIndex = Math.floor(Math.random() * youtubeList.length);
+      const initialId = youtubeList[currentTrackIndex];
+
+      player = new YT.Player('yt-player', {
+        height: '200',
+        width: '200',
+        videoId: initialId,
+        playerVars: { 
+          autoplay: 0, 
+          controls: 0, 
+          loop: 1, 
+          playlist: initialId 
+        }
+      });
+    }
+
+    function playRandomYouTubeTrack() {
+      if (player && typeof player.loadVideoById === 'function') {
+        let newIndex;
+        do {
+          newIndex = Math.floor(Math.random() * youtubeList.length);
+        } while (newIndex === currentTrackIndex && youtubeList.length > 1);
+        
+        currentTrackIndex = newIndex;
+        const nextId = youtubeList[currentTrackIndex];
+        
+        player.loadVideoById(nextId);
+        player.setVolume(50);
+        player.playVideo();
+      }
+    }
+
+    const presets = [
+      {
+        title: "📡 TÍN HIỆU TRUYỀN TỪ XA",
+        desc: "Phát hiện đối tượng cách xa hàng trăm km nhưng lại chiếm trọn <b>100%</b> bộ nhớ của ai đó.",
+        action: "👉 Lệnh xử lý: Gọi video call ngay để kiểm tra tình hình!"
+      },
+      {
+        title: "🔋 PIN TÂM TRẠNG CẦN NẠP BÙ",
+        desc: "Hệ thống ghi nhận đối tượng đang làm việc chăm chỉ nhưng có dấu hiệu nhớ một người ở xa.",
+        action: "👉 Quyền lợi: Được order ngay 1 ly trà sữa giao tận cửa phòng!"
+      },
+      {
+        title: "⚠️ PHÁT HIỆN SỰ DỄ THƯƠNG VƯỢT VÙNG PHỦ SÓNG",
+        desc: "Dù cách nhau cả bản đồ thì mức độ cuốn hút vẫn xuyên qua màn hình làm ai đó liêu xiêu.",
+        action: "👉 Cảnh báo: Đừng cười xinh thế, người ở xa sốt ruột đấy!"
+      },
+      {
+        title: "⏳ ĐANG ĐẾM NGƯỢC THỜI GIAN",
+        desc: "AI tính toán rằng khoảng cách địa lý chỉ là tạm thời, còn độ tương thích thì là tuyệt đối.",
+        action: "👉 Kế hoạch: Lần tới gặp nhau chắc chắn phải đi ăn cả thế giới!"
+      },
+      {
+        title: "✨ GÓI NĂNG LƯỢNG ĐẶC BIỆT",
+        desc: "Không ở cạnh để vỗ vai trực tiếp được, nên gửi một chiếc ôm ảo cực to qua chiếc web này.",
+        action: "👉 Nhắc nhở: Dù bận rộn cũng phải ăn uống đầy đủ và ngủ sớm nhé!"
+      },
+      {
+        title: "🔒 ĐÃ KHÓA ĐỐI TƯỢNG ĐỘC QUYỀN",
+        desc: "Bản đồ có thể xa, nhưng vị trí trong lòng thì không ai chen chân vào nổi.",
+        action: "👉 Yêu cầu: Mau chụp màn hình này gửi lại cho người gửi web!"
+      }
+    ];
+
+    let lastPresetIndex = -1;
+    let videoElement = document.getElementById('video');
+    let hiddenCanvas = document.getElementById('hidden-canvas');
+    let scanLoop = null;
+    let faceDetector = null;
+
+    if ('FaceDetector' in window) {
+      try {
+        faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      } catch (e) {
+        faceDetector = null;
+      }
+    }
+
+    async function initScanner() {
+      playRandomYouTubeTrack();
+      document.getElementById('start-screen').style.display = 'none';
+
+      try {
+        streamTracker = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 640 } },
+          audio: false
+        });
+        videoElement.srcObject = streamTracker;
+        videoElement.onloadedmetadata = () => {
+          startAnalysis();
+        };
+      } catch (err) {
+        alert("Cần cấp quyền camera để gương ma thuật hoạt động bạn nhé!");
+      }
+    }
+
+    function handleRescan() {
+      playRandomYouTubeTrack();
+      startAnalysis();
+    }
+
+    // Hiển thị lá thư thông điệp cuối cùng kèm pháo hoa
+    function openFinalModal() {
+      document.getElementById('final-modal').style.display = 'flex';
+      
+      // Giảm âm lượng nhạc nền cho du dương
+      if (player && player.setVolume) player.setVolume(25);
+
+      // Bắn pháo hoa hình tim
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 40,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#ff4b8b', '#ff75a0', '#fbcfe8']
+        });
+      }
+    }
+
+    function closeFinalModal() {
+      document.getElementById('final-modal').style.display = 'none';
+      if (player && player.setVolume) player.setVolume(50);
+    }
+
+    function analyzeCameraFrame() {
+      const ctx = hiddenCanvas.getContext('2d');
+      const w = 48;
+      const h = 48;
+      hiddenCanvas.width = w;
+      hiddenCanvas.height = h;
+      ctx.drawImage(videoElement, 0, 0, w, h);
+
+      const frame = ctx.getImageData(0, 0, w, h);
+      const data = frame.data;
+      let totalLuma = 0;
+      let lumas = [];
+
+      for (let i = 0; i < data.length; i += 4) {
+        let luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        totalLuma += luma;
+        lumas.push(luma);
+      }
+
+      const avgBrightness = totalLuma / lumas.length;
+      let variance = 0;
+      for (let l of lumas) {
+        variance += Math.pow(l - avgBrightness, 2);
+      }
+      variance = variance / lumas.length;
+
+      return { brightness: avgBrightness, variance: variance };
+    }
+
+    async function checkFacePresent() {
+      if (faceDetector) {
+        try {
+          const faces = await faceDetector.detect(videoElement);
+          if (faces.length > 0) return { ok: true };
+        } catch (e) {}
+      }
+
+      const stats = analyzeCameraFrame();
+
+      if (stats.brightness < 30) {
+        return { ok: false, reason: "DARK" };
+      }
+
+      if (stats.variance < 90) {
+        return { ok: false, reason: "BLOCKED" };
+      }
+
+      return { ok: true };
+    }
+
+    function startAnalysis() {
+      if (scanLoop) clearInterval(scanLoop);
+
+      const log1 = document.getElementById('log-1');
+      const log2 = document.getElementById('log-2');
+      const sysStatus = document.getElementById('sys-status');
+      const scanTarget = document.getElementById('scanTarget');
+      const resultCard = document.getElementById('result-card');
+      const darkWarning = document.getElementById('dark-warning');
+      const warnTitle = document.getElementById('warn-title');
+      const warnDesc = document.getElementById('warn-desc');
+      const warnIcon = document.getElementById('warn-icon');
+
+      resultCard.style.display = 'none';
+      darkWarning.style.display = 'none';
+      scanTarget.classList.remove('locked');
+      sysStatus.innerText = "SEARCHING...";
+      sysStatus.style.color = "#00f0ff";
+      sysStatus.classList.remove('hud-highlight');
+
+      let scanProgress = 0;
+
+      scanLoop = setInterval(async () => {
+        const check = await checkFacePresent();
+
+        if (!check.ok) {
+          scanProgress = Math.max(0, scanProgress - 15);
+          log2.innerHTML = `> Tiến độ nhận diện: ${scanProgress}%`;
+
+          darkWarning.style.display = 'block';
+          sysStatus.innerText = "TARGET LOST";
+          sysStatus.style.color = "#eab308";
+
+          if (check.reason === "DARK") {
+            warnIcon.innerText = "💡";
+            warnTitle.innerText = "TỐI QUÁ KHÔNG THẤY GÌ!";
+            warnDesc.innerText = "Phòng tối om thế này AI không tìm thấy nụ cười của bạn đâu. Bật đèn lên nha!";
+            log1.innerHTML = "> CẢNH BÁO: Môi trường thiếu sáng";
+          } else {
+            warnIcon.innerText = "🙈";
+            warnTitle.innerText = "KHÔNG TÌM THẤY KHUÔN MẶT!";
+            warnDesc.innerText = "Đừng che camera nữa! Hãy đưa khuôn mặt vào ngay giữa khung quét nhé.";
+            log1.innerHTML = "> CẢNH BÁO: Camera đang bị che";
+          }
+          return;
+        }
+
+        darkWarning.style.display = 'none';
+        sysStatus.innerText = "SCANNING...";
+        sysStatus.style.color = "#00f0ff";
+        log1.innerHTML = "> Đã bắt được mục tiêu. Đang quét...";
+
+        scanProgress += 20;
+        log2.innerHTML = `> Tiến độ nhận diện: ${Math.min(100, scanProgress)}%`;
+
+        if (scanProgress >= 100) {
+          clearInterval(scanLoop);
+          lockAndShowResult();
+        }
+      }, 500);
+    }
+
+    function lockAndShowResult() {
+      const log1 = document.getElementById('log-1');
+      const log2 = document.getElementById('log-2');
+      const sysStatus = document.getElementById('sys-status');
+      const scanTarget = document.getElementById('scanTarget');
+      const resultCard = document.getElementById('result-card');
+
+      let idx;
+      do {
+        idx = Math.floor(Math.random() * presets.length);
+      } while (idx === lastPresetIndex && presets.length > 1);
+      lastPresetIndex = idx;
+      const data = presets[idx];
+
+      log1.innerHTML = "> Phân tích hoàn tất: <b>Khuôn mặt hợp lệ</b>";
+      log2.innerHTML = "> Chỉ số đáng yêu: <b style='color:#ff3366;'>VƯỢT NGƯỠNG!</b>";
+
+      scanTarget.classList.add('locked');
+      sysStatus.innerText = "TARGET LOCKED ❤️";
+      sysStatus.classList.add('hud-highlight');
+
+      document.getElementById('res-title').innerText = data.title;
+      document.getElementById('res-desc').innerHTML = data.desc;
+      document.getElementById('res-action').innerText = data.action;
+
+      resultCard.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
